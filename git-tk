@@ -1,0 +1,380 @@
+#!/bin/bash
+
+# This file is part of the git-tk distribution
+# Copyright (c) 2017 Zachary Young.
+# 
+# This program is free software: you can redistribute it and/or modify  
+# it under the terms of the GNU General Public License as published by  
+# the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but 
+# WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License 
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+args=( ${@} )
+
+log_brand="[Git TK]"
+
+timer_branch="tk"
+old_branch=.git-tk_old-branch
+
+now="$(date)"
+
+###################################################################
+#                       Colors
+###################################################################
+    reset=$(tput sgr0)
+
+    RED=$(tput setaf 1)
+    GREEN=$(tput setaf 2)
+    YELLOW=$(tput setaf 3)
+    BLUE=$(tput setaf 4)
+    PURPLE=$(tput setaf 5)
+    CYAN=$(tput setaf 6)
+    WHITE=$(tput setaf 7)
+
+    BRED=$(tput setaf 1 ; tput bold)
+    BGREEN=$(tput setaf 2 ; tput bold)
+    BYELLOW=$(tput setaf 3 ; tput bold)
+    BBLUE=$(tput setaf 4 ; tput bold)
+    BPURPLE=$(tput setaf 5 ; tput bold)
+    BCYAN=$(tput setaf 6 ; tput bold)
+    BWHITE=$(tput setaf 7 ; tput bold)
+
+###################################################################
+#                       Helper Functions
+###################################################################
+    function checkout_old {
+        cat $old_branch | git checkout - > /dev/null 2>&1
+        /usr/bin/rm $old_branch
+    }
+
+    function checkout_timer {
+        set_old_branch
+        git checkout $timer_branch > /dev/null 2>&1
+    }
+
+    function commit_start {
+        git commit --allow-empty -m "$log_brand Start: $now" > /dev/null
+    }
+
+    function commit_end {
+        git commit --allow-empty -m "$log_brand End:   $now" > /dev/null
+    }
+
+    function commit_total {
+        git commit --allow-empty -m "$log_brand $1" > /dev/null
+    }
+
+    function set_old_branch {
+        touch $old_branch
+        git status -b --porcelain | head -n 1 | cut -d ' ' -f 2 > $old_branch
+    }
+
+    function pop {
+        git stash pop > /dev/null 2>&1
+    }
+
+    function print_total {
+        echo "$BLUE""####### Total: $(date -u -d @"$1" +'%Hh %Mm %Ss')$reset"
+    }
+
+    function rebase_continue {
+        git rebase --continue | grep Stopped
+    }
+
+    function rebase_finished {
+        if ! is_rebasing; then
+            checkout_old
+            pop
+        fi
+    }
+
+    function is_rebasing {
+        git status | grep -q rebase
+    }
+
+    function set_commit_date {
+        new_date="${args[@]:2}"
+        export GIT_AUTHOR_DATE="$new_date"
+        export GIT_COMMITTER_DATE="$new_date"
+    }
+
+    function set_hash_arrays {
+        mapfile -t start_hashes < <(git log --reverse --format=format:"%h %s" $timer_branch 2> /dev/null | grep Start | cut -d ' ' -f 1)
+        mapfile -t end_hashes < <(git log --reverse --format=format:"%h %s" $timer_branch 2> /dev/null | grep End | cut -d ' ' -f 1)
+        mapfile -t total_hashes < <(git log --reverse --format=format:"%h %s" $timer_branch 2> /dev/null | grep Total | cut -d ' ' -f 1)
+    }
+
+    function set_time_arrays {
+        mapfile -t starts < <(git log --reverse --pretty=format:"%s" $timer_branch 2> /dev/null | grep Start | cut -d ' ' -f 4-)
+        mapfile -t ends < <(git log --reverse --pretty=format:"%s" $timer_branch 2> /dev/null | grep End | cut -d ' ' -f 4-)
+    }
+
+    function stash {
+        git stash > /dev/null
+    }
+
+    function wait_for_input {
+        read -n1 -r -p "Press any key to continue..." key
+    }
+
+###################################################################
+#                       Show Log
+###################################################################
+function log {
+    for i in ${!starts[@]}; do
+        recording=false
+
+        # If currently recording time
+        if (( $i >= ${#ends[@]} )); then
+            recording=true
+            ends[ $i ]=$now
+        fi
+
+        start="${starts[ $i ]}"
+        end="${ends[ $i ]}"
+        s=$(date -d "$start" +%s )
+        e=$(date -d "$end" +%s )
+        diff=$(( e - s ))
+        acc=$(( acc + diff ))
+
+        # Print starting time
+        printf "$GREEN${start_hashes[ $i ]} "
+        git log -1 --oneline --format=format:"%s" ${start_hashes[ $i ]} | cut -d ' ' -f 3-
+        printf "$reset"
+
+        # Print all commits
+        if [[ "${args[ 1 ]}" == "-v" ]]; then
+            git log --reverse --color=always --all --not $timer_branch --after="${starts[ $i ]}" --before="${ends[ $i ]}"
+        else
+            git log --reverse --oneline --decorate --color=always --all --not $timer_branch --after="${starts[ $i ]}" --before="${ends[ $i ]}"
+        fi
+
+        if $recording; then
+            echo "$RED####### End:   $BRED""CURRENTLY ACTIVE$reset"
+        else
+            # Print ending time
+            printf "$RED${end_hashes[ $i ]} "
+            git log -1 --oneline --format=format:"%s" ${end_hashes[ $i ]} | cut -d ' ' -f 3-
+            printf "$reset"
+        fi
+
+        # Print Total
+        print_total "$diff"
+
+        echo ""
+    done
+
+    message="$message""Grand Total: $( date -u -d @"$acc" +'%-Hh %-Mm %-Ss' )"
+    echo "$BRED""$message""$reset"
+}
+
+###################################################################
+#                       End Time Slot
+###################################################################
+function end_slot {
+    echo "$log_brand Closing time slot"
+
+    # Store unfinished chagnes
+    stash
+
+    # Change to $timer_branch
+    checkout_timer
+
+    # Commit ending timestamp
+    commit_end
+
+    # get all timestamps
+    set_time_arrays
+
+    # Human readable timestamps
+    start="${starts[ $(( ${#starts[@]} - 1 )) ]}"
+    end="${ends[ $(( ${#ends[@]} - 1 )) ]}"
+
+    # Get timestamps in seconds since epoch
+    s=$(date -d "$start" +%s )
+    e=$(date -d "$end" +%s )
+
+    # Get the amount of seconds in time slot
+    diff=$(( e - s ))
+
+    message="Start: $start"
+    message="$message"$'\n'"End:   $end"
+
+    total="Total: $( date -u -d @"$diff" +'%Hh %Mm %Ss' )"
+    message="$message"$'\n'"$total"
+
+    # Make commit of time spent
+    # commit_total "$total"
+
+    # Return to original branch
+    checkout_old
+
+    # Restore unfinished changes
+    pop
+}
+
+###################################################################
+#                       Start Time Slot
+###################################################################
+function start_slot {
+    echo "$log_brand Setting start of time slot"
+
+    # Store unfinished changes
+    stash
+
+    if git branch | grep -q $timer_branch; then
+        checkout_timer
+    else
+        pop
+        echo "Please initiate the timer"
+        exit
+    fi
+
+    # Commit starting timestamp
+    commit_start
+
+    # Return to original branch
+    checkout_old
+
+    # Restore unfinished changes
+    pop
+}
+
+###################################################################
+#                   Initiate History Rebase
+###################################################################
+function rebase {
+    if [[ ${args[ 1 ]} == "start" ]]; then
+        rebase_start
+        exit
+    elif [[ ${args[ 1 ]} == "end" ]]; then
+        rebase_end
+        exit
+    fi
+
+    if is_rebasing; then
+        rebase_continue
+        rebase_finished
+        exit
+    fi
+
+    echo "$log_brand Editing TK History"
+
+    stash
+
+    if git branch | grep -q $timer_branch; then
+        checkout_timer
+    else
+        pop
+        echo "Please initiate the timer"
+        exit
+    fi
+
+    git rebase -q -ik $(git rev-list --max-parents=0 HEAD)
+
+    rebase_finished
+}
+
+###################################################################
+#                   Set Starting Timestamp
+###################################################################
+function rebase_start {
+    set_commit_date
+    if git commit --allow-empty --amend --date="$new_date" -m "$log_brand Start:   $new_date" > /dev/null; then
+        rebase_continue
+        rebase_finished
+    fi
+}
+
+###################################################################
+#                   Set Ending Timestamp
+###################################################################
+function rebase_end {
+    set_commit_date
+    if git commit --allow-empty --amend --date="$new_date" -m "$log_brand End:   $new_date" > /dev/null; then
+        rebase_continue
+        rebase_finished
+    fi
+}
+
+###################################################################
+#                   Create Timestamp
+###################################################################
+function create {
+    checkout_timer
+
+    if [[ ${args[ 1 ]} == "start" ]]; then
+        create_start
+    elif [[ ${args[ 1 ]} == "end" ]]; then
+        create_end
+    else
+        echo "Please supply a timestamp"
+    fi
+
+    checkout_old
+}
+
+###################################################################
+#                   Create Starting Timestamp
+###################################################################
+function create_start {
+    set_commit_date
+    git commit --allow-empty --date="$new_date" -m "$log_brand Start:   $new_date" > /dev/null
+}
+
+###################################################################
+#                   Create Ending Timestamp
+###################################################################
+function create_end {
+    set_commit_date
+    git commit --allow-empty --date="$new_date" -m "$log_brand End:   $new_date" > /dev/null
+}
+
+###################################################################
+#                       Init TK
+###################################################################
+function init {
+    echo "[Git TK] Setting up Git TK"
+
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        git branch $timer_branch $(git rev-list --max-parents=0 HEAD) > /dev/null
+    else
+        git init
+        git commit --allow-empty -m "Init"
+
+        git branch $timer_branch $(git rev-list --max-parents=0 HEAD) > /dev/null
+    fi
+}
+
+if (( $# < 1 )); then
+    set_time_arrays
+
+    if is_rebasing; then
+        echo "Currently rebasing"
+        exit
+    fi
+
+    if (( ${#starts[@]} > ${#ends[@]} )); then
+        end_slot
+    else
+        start_slot
+    fi
+elif [[ "$1" == "init" ]]; then
+    init
+elif [[ "$1" == "log" ]]; then
+    set_time_arrays
+    set_hash_arrays
+    log
+elif [[ "$1" == "create" ]]; then
+    create
+elif [[ "$1" == "rebase" ]]; then
+    rebase
+else
+    echo "$1 is not a valid command"
+fi
