@@ -72,10 +72,6 @@ now="$(date)"
         git commit --allow-empty -m "$log_brand $1" > /dev/null
     }
 
-    function set_old_branch {
-        touch $old_branch
-        git status -b --porcelain | head -n 1 | cut -d ' ' -f 2 > $old_branch
-    }
 
     function pop {
         git stash pop > /dev/null 2>&1
@@ -113,6 +109,11 @@ now="$(date)"
         mapfile -t start_hashes < <(git log --reverse --format=format:"%h %s" $timer_branch 2> /dev/null | grep Start | cut -d ' ' -f 1)
         mapfile -t end_hashes < <(git log --reverse --format=format:"%h %s" $timer_branch 2> /dev/null | grep End | cut -d ' ' -f 1)
         mapfile -t total_hashes < <(git log --reverse --format=format:"%h %s" $timer_branch 2> /dev/null | grep Total | cut -d ' ' -f 1)
+    }
+
+    function set_old_branch {
+        touch $old_branch
+        git status -b --porcelain | head -n 1 | cut -d ' ' -f 2 > $old_branch
     }
 
     function set_time_arrays {
