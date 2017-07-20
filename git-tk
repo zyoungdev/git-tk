@@ -77,10 +77,6 @@ now="$(date)"
         git stash pop > /dev/null 2>&1
     }
 
-    function print_total {
-        echo "$BLUE""####### Total: $(date -u -d @"$1" +'%Hh %Mm %Ss')$reset"
-    }
-
     function rebase_continue {
         git rebase --continue | grep Stopped
     }
@@ -98,6 +94,21 @@ now="$(date)"
 
     function is_rebasing {
         git status | grep -q rebase
+    }
+
+    function set_acc_time {
+        val=$1
+        seconds=$(( $val % 60 ))
+        val=$(( $val / 60 ))
+        minutes=$(( $val % 60 ))
+        val=$(( $val / 60 ))
+        hours=$(( $val % 24 ))
+        val=$(( $val / 24 ))
+        days=$(( $val % 365 ))
+        val=$(( $val / 365 ))
+        years=$val
+
+        acc_time_string="$years""y ""$days""d ""$hours""h ""$minutes""m ""$seconds""s"
     }
 
     function set_commit_date {
@@ -147,6 +158,7 @@ function log {
             ends[ $i ]=$now
         fi
 
+
         start="${starts[ $i ]}"
         end="${ends[ $i ]}"
         s=$(date -d "$start" +%s )
@@ -176,13 +188,14 @@ function log {
         fi
 
         # Print Total
-        print_total "$diff"
+        set_acc_time "$diff"
+        echo "$BLUE""####### Total: ""$acc_time_string""$reset"
 
         echo ""
     done
 
-    message="$message""Grand Total: $( date -u -d @"$acc" +'%-Hh %-Mm %-Ss' )"
-    echo "$BRED""$message""$reset"
+    set_acc_time "$acc"
+    echo "$BRED""Grand Total: ""$acc_time_string""$reset"
 }
 
 ###################################################################
