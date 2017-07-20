@@ -91,6 +91,11 @@ now="$(date)"
         fi
     }
 
+    function rebase_sort {
+        export GIT_SEQUENCE_EDITOR="sort --output=\".git/rebase-merge/git-rebase-todo\" -k11 -k7M -k8 -k9"
+        git rebase -ik $(git rev-list --max-parents=0 HEAD)
+    }
+
     function is_rebasing {
         git status | grep -q rebase
     }
@@ -338,6 +343,8 @@ function create_end {
 
     set_commit_date
     git commit --allow-empty --date="$new_date" -m "$log_brand End:   $new_date" > /dev/null
+
+    rebase_sort
 }
 
 ###################################################################
