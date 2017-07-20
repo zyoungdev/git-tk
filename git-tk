@@ -318,7 +318,7 @@ function create_start {
     fi
 
     set_commit_date
-    git commit --allow-empty --date="$new_date" -m "$log_brand Start:   $new_date" > /dev/null
+    git commit --allow-empty --date="$new_date" -m "$log_brand Start: $new_date" > /dev/null
 }
 
 ###################################################################
