@@ -103,6 +103,10 @@ now="$(date)"
         new_date="${args[@]:2}"
         export GIT_AUTHOR_DATE="$new_date"
         export GIT_COMMITTER_DATE="$new_date"
+
+        if ! date -d "$GIT_COMMITER_DATE" > /dev/null 2>&1; then
+            exit
+        fi
     }
 
     function set_hash_arrays {
