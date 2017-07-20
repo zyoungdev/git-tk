@@ -307,23 +307,36 @@ function rebase_end {
 #                   Create Timestamp
 ###################################################################
 function create {
+    stash
+
     checkout_timer
+
+    set_time_arrays
 
     if [[ ${args[ 1 ]} == "start" ]]; then
         create_start
     elif [[ ${args[ 1 ]} == "end" ]]; then
         create_end
     else
-        echo "Please supply a timestamp"
+        echo "Usage: git-tk create <start|end> \"<timestamp>\""
     fi
 
     checkout_old
+
+    pop
 }
 
 ###################################################################
 #                   Create Starting Timestamp
 ###################################################################
 function create_start {
+    if [ ${#starts[@]} -gt ${#ends[@]} ]; then
+        echo "There is a dangling starting timestamp. Please end it"
+        checkout_old
+        pop
+        exit
+    fi
+
     set_commit_date
     git commit --allow-empty --date="$new_date" -m "$log_brand Start:   $new_date" > /dev/null
 }
@@ -332,6 +345,13 @@ function create_start {
 #                   Create Ending Timestamp
 ###################################################################
 function create_end {
+    if [ ${#starts[@]} -eq ${#ends[@]} ]; then
+        echo "Please create a starting timestamp before creating this ending timestamp."
+        checkout_old
+        pop
+        exit
+    fi
+
     set_commit_date
     git commit --allow-empty --date="$new_date" -m "$log_brand End:   $new_date" > /dev/null
 }
