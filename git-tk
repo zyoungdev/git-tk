@@ -51,10 +51,12 @@ now="$(date)"
     function checkout_old {
         cat $old_branch | git checkout - > /dev/null 2>&1
         /usr/bin/rm $old_branch
+        pop
     }
 
     function checkout_timer {
         set_old_branch
+        stash
         git checkout $timer_branch > /dev/null 2>&1
     }
 
@@ -90,7 +92,6 @@ now="$(date)"
     function rebase_finished {
         if ! is_rebasing; then
             checkout_old
-            pop
         fi
     }
 
@@ -180,9 +181,6 @@ function log {
 function end_slot {
     echo "$log_brand Closing time slot"
 
-    # Store unfinished chagnes
-    stash
-
     # Change to $timer_branch
     checkout_timer
 
@@ -214,9 +212,6 @@ function end_slot {
 
     # Return to original branch
     checkout_old
-
-    # Restore unfinished changes
-    pop
 }
 
 ###################################################################
@@ -225,13 +220,9 @@ function end_slot {
 function start_slot {
     echo "$log_brand Setting start of time slot"
 
-    # Store unfinished changes
-    stash
-
     if git branch | grep -q $timer_branch; then
         checkout_timer
     else
-        pop
         echo "Please initiate the timer"
         exit
     fi
@@ -241,9 +232,6 @@ function start_slot {
 
     # Return to original branch
     checkout_old
-
-    # Restore unfinished changes
-    pop
 }
 
 ###################################################################
@@ -266,12 +254,9 @@ function rebase {
 
     echo "$log_brand Editing TK History"
 
-    stash
-
     if git branch | grep -q $timer_branch; then
         checkout_timer
     else
-        pop
         echo "Please initiate the timer"
         exit
     fi
@@ -307,8 +292,6 @@ function rebase_end {
 #                   Create Timestamp
 ###################################################################
 function create {
-    stash
-
     checkout_timer
 
     set_time_arrays
@@ -322,18 +305,15 @@ function create {
     fi
 
     checkout_old
-
-    pop
 }
 
 ###################################################################
 #                   Create Starting Timestamp
 ###################################################################
 function create_start {
-    if [ ${#starts[@]} -gt ${#ends[@]} ]; then
+    if (( ${#starts[@]} > ${#ends[@]} )); then
         echo "There is a dangling starting timestamp. Please end it"
         checkout_old
-        pop
         exit
     fi
 
@@ -345,10 +325,9 @@ function create_start {
 #                   Create Ending Timestamp
 ###################################################################
 function create_end {
-    if [ ${#starts[@]} -eq ${#ends[@]} ]; then
+    if (( ${#starts[@]} == ${#ends[@]} )); then
         echo "Please create a starting timestamp before creating this ending timestamp."
         checkout_old
-        pop
         exit
     fi
 
