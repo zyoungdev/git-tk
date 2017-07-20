@@ -48,6 +48,13 @@ now="$(date)"
 ###################################################################
 #                       Helper Functions
 ###################################################################
+    function check_for_tk_branch {
+        if ! git branch | grep -q $timer_branch; then
+            echo "Please initiate git-tk with: git-tk init"
+            exit
+        fi
+    }
+
     function checkout_old {
         cat $old_branch | git checkout - > /dev/null 2>&1
         /usr/bin/rm $old_branch
@@ -59,19 +66,6 @@ now="$(date)"
         stash
         git checkout $timer_branch > /dev/null 2>&1
     }
-
-    function commit_start {
-        git commit --allow-empty -m "$log_brand Start: $now" > /dev/null
-    }
-
-    function commit_end {
-        git commit --allow-empty -m "$log_brand End:   $now" > /dev/null
-    }
-
-    function commit_total {
-        git commit --allow-empty -m "$log_brand $1" > /dev/null
-    }
-
 
     function pop {
         git stash pop > /dev/null 2>&1
@@ -108,15 +102,21 @@ now="$(date)"
         val=$(( $val / 365 ))
         years=$val
 
-        acc_time_string="$years""y ""$days""d ""$hours""h ""$minutes""m ""$seconds""s"
+        acc_time_string=""
+        [ $years -ne 0 ] && acc_time_string="$acc_time_string""$years""y "
+        [ $days -ne 0 ] && acc_time_string="$acc_time_string""$days""d "
+        [ $hours -ne 0 ] && acc_time_string="$acc_time_string""$hours""h "
+        [ $minutes -ne 0 ] && acc_time_string="$acc_time_string""$minutes""m "
+        [ $seconds -ne 0 ] && acc_time_string="$acc_time_string""$seconds""s"
     }
 
     function set_commit_date {
-        new_date="${args[@]:2}"
+        new_date="$1"
         export GIT_AUTHOR_DATE="$new_date"
         export GIT_COMMITTER_DATE="$new_date"
 
-        if ! date -d "$GIT_COMMITER_DATE" > /dev/null 2>&1; then
+        if ! date -d "$new_date" > /dev/null 2>&1; then
+            echo "\"$new_date\" is an invalid date format."
             exit
         fi
     }
@@ -148,257 +148,182 @@ now="$(date)"
 ###################################################################
 #                       Show Log
 ###################################################################
-function log {
-    for i in ${!starts[@]}; do
-        recording=false
+    function log {
+        for i in ${!starts[@]}; do
+            recording=false
 
-        # If currently recording time
-        if (( $i >= ${#ends[@]} )); then
-            recording=true
-            ends[ $i ]=$now
-        fi
+            # If currently recording time
+            if (( $i >= ${#ends[@]} )); then
+                recording=true
+                ends[ $i ]=$now
+            fi
 
 
-        start="${starts[ $i ]}"
-        end="${ends[ $i ]}"
-        s=$(date -d "$start" +%s )
-        e=$(date -d "$end" +%s )
-        diff=$(( e - s ))
-        acc=$(( acc + diff ))
+            start="${starts[ $i ]}"
+            end="${ends[ $i ]}"
+            s=$(date -d "$start" +%s )
+            e=$(date -d "$end" +%s )
+            diff=$(( e - s ))
+            acc=$(( acc + diff ))
 
-        # Print starting time
-        printf "$GREEN${start_hashes[ $i ]} "
-        git log -1 --oneline --format=format:"%s" ${start_hashes[ $i ]} | cut -d ' ' -f 3-
-        printf "$reset"
-
-        # Print all commits
-        if [[ "${args[ 1 ]}" == "-v" ]]; then
-            git log --reverse --color=always --all --not $timer_branch --after="${starts[ $i ]}" --before="${ends[ $i ]}"
-        else
-            git log --reverse --oneline --decorate --color=always --all --not $timer_branch --after="${starts[ $i ]}" --before="${ends[ $i ]}"
-        fi
-
-        if $recording; then
-            echo "$RED####### End:   $BRED""CURRENTLY ACTIVE$reset"
-        else
-            # Print ending time
-            printf "$RED${end_hashes[ $i ]} "
-            git log -1 --oneline --format=format:"%s" ${end_hashes[ $i ]} | cut -d ' ' -f 3-
+            # Print starting time
+            printf "$GREEN${start_hashes[ $i ]} "
+            git log -1 --oneline --format=format:"%s" ${start_hashes[ $i ]} | cut -d ' ' -f 3-
             printf "$reset"
+
+            # Print all commits
+            if [[ "${args[ 1 ]}" == "-v" ]]; then
+                git log --reverse --color=always --all --not $timer_branch --after="${starts[ $i ]}" --before="${ends[ $i ]}"
+            else
+                git log --reverse --oneline --decorate --color=always --all --not $timer_branch --after="${starts[ $i ]}" --before="${ends[ $i ]}"
+            fi
+
+            if $recording; then
+                echo "$RED####### End:   $BRED""CURRENTLY ACTIVE$reset"
+            else
+                # Print ending time
+                printf "$RED${end_hashes[ $i ]} "
+                git log -1 --oneline --format=format:"%s" ${end_hashes[ $i ]} | cut -d ' ' -f 3-
+                printf "$reset"
+            fi
+
+            # Print Total
+            set_acc_time "$diff"
+            echo "$BLUE""####### Total: ""$acc_time_string""$reset"
+
+            echo ""
+        done
+
+        set_acc_time "$acc"
+        echo "$BRED""Grand Total: ""$acc_time_string""$reset"
+    }
+
+###################################################################
+#                       Timestamp
+###################################################################
+    function create_timestamp {
+        if is_rebasing; then
+            echo "Currently rebasing"
+            exit
         fi
 
-        # Print Total
-        set_acc_time "$diff"
-        echo "$BLUE""####### Total: ""$acc_time_string""$reset"
+        set_time_arrays
 
-        echo ""
-    done
+        if (( ${#starts[@]} > ${#ends[@]} )); then
+            start_or_end_str="End:   "
+            echo "$log_brand Setting end of time slot"
+        else
+            start_or_end_str="Start: "
+            echo "$log_brand Setting start of time slot"
+        fi
 
-    set_acc_time "$acc"
-    echo "$BRED""Grand Total: ""$acc_time_string""$reset"
-}
-
-###################################################################
-#                       End Time Slot
-###################################################################
-function end_slot {
-    echo "$log_brand Closing time slot"
-
-    # Change to $timer_branch
-    checkout_timer
-
-    # Commit ending timestamp
-    commit_end
-
-    # get all timestamps
-    set_time_arrays
-
-    # Human readable timestamps
-    start="${starts[ $(( ${#starts[@]} - 1 )) ]}"
-    end="${ends[ $(( ${#ends[@]} - 1 )) ]}"
-
-    # Get timestamps in seconds since epoch
-    s=$(date -d "$start" +%s )
-    e=$(date -d "$end" +%s )
-
-    # Get the amount of seconds in time slot
-    diff=$(( e - s ))
-
-    message="Start: $start"
-    message="$message"$'\n'"End:   $end"
-
-    total="Total: $( date -u -d @"$diff" +'%Hh %Mm %Ss' )"
-    message="$message"$'\n'"$total"
-
-    # Make commit of time spent
-    # commit_total "$total"
-
-    # Return to original branch
-    checkout_old
-}
-
-###################################################################
-#                       Start Time Slot
-###################################################################
-function start_slot {
-    echo "$log_brand Setting start of time slot"
-
-    if git branch | grep -q $timer_branch; then
+        # Switch to timer_branch
         checkout_timer
-    else
-        echo "Please initiate the timer"
-        exit
-    fi
 
-    # Commit starting timestamp
-    commit_start
+        # Generate or collect timestamp
+        if [[ -z "${@}" ]]; then
+            timestamp="$now"
+        else
+            timestamp="${@}"
+        fi
 
-    # Return to original branch
-    checkout_old
-}
+        # Commit to timer_branch
+        commit_timestamp
 
-###################################################################
-#                   Initiate History Rebase
-###################################################################
-function rebase {
-    if [[ ${args[ 1 ]} == "start" ]]; then
-        rebase_start
-        exit
-    elif [[ ${args[ 1 ]} == "end" ]]; then
-        rebase_end
-        exit
-    fi
-
-    if is_rebasing; then
-        rebase_continue
-        rebase_finished
-        exit
-    fi
-
-    echo "$log_brand Editing TK History"
-
-    if git branch | grep -q $timer_branch; then
-        checkout_timer
-    else
-        echo "Please initiate the timer"
-        exit
-    fi
-
-    git rebase -q -ik $(git rev-list --max-parents=0 HEAD)
-
-    rebase_finished
-}
-
-###################################################################
-#                   Set Starting Timestamp
-###################################################################
-function rebase_start {
-    set_commit_date
-    if git commit --allow-empty --amend --date="$new_date" -m "$log_brand Start:   $new_date" > /dev/null; then
-        rebase_continue
-        rebase_finished
-    fi
-}
-
-###################################################################
-#                   Set Ending Timestamp
-###################################################################
-function rebase_end {
-    set_commit_date
-    if git commit --allow-empty --amend --date="$new_date" -m "$log_brand End:   $new_date" > /dev/null; then
-        rebase_continue
-        rebase_finished
-    fi
-}
-
-###################################################################
-#                   Create Timestamp
-###################################################################
-function create {
-    checkout_timer
-
-    set_time_arrays
-
-    if [[ ${args[ 1 ]} == "start" ]]; then
-        create_start
-    elif [[ ${args[ 1 ]} == "end" ]]; then
-        create_end
-    else
-        echo "Usage: git-tk create <start|end> \"<timestamp>\""
-    fi
-
-    checkout_old
-}
-
-###################################################################
-#                   Create Starting Timestamp
-###################################################################
-function create_start {
-    if (( ${#starts[@]} > ${#ends[@]} )); then
-        echo "There is a dangling starting timestamp. Please end it"
+        # Return to original branch
         checkout_old
-        exit
-    fi
+    }
 
-    set_commit_date
-    git commit --allow-empty --date="$new_date" -m "$log_brand Start: $new_date" > /dev/null
-}
+    function commit_timestamp {
+        git commit --allow-empty -m "$log_brand ""$start_or_end_str""$timestamp" > /dev/null
+    }
 
 ###################################################################
-#                   Create Ending Timestamp
+#                           Rebase
 ###################################################################
-function create_end {
-    if (( ${#starts[@]} == ${#ends[@]} )); then
-        echo "Please create a starting timestamp before creating this ending timestamp."
-        checkout_old
-        exit
-    fi
+    function rebase {
+        timestamp="${args[@]:1}"
+        if is_rebasing; then
+            if [[ -z "$timestamp" ]]; then
+                rebase_continue
+                rebase_finished
+            else
+                if git log --oneline -1 | grep -q Start; then
+                    rebase_str="Start: "
+                    rebase_commit
+                elif git log --oneline -1 | grep -q End; then
+                    rebase_str="End:   "
+                    rebase_commit
+                else
+                    echo "This is not a git-tk commit"
+                    git rebase --abort
+                    rebase_finished
+                fi
+            fi
 
-    set_commit_date
-    git commit --allow-empty --date="$new_date" -m "$log_brand End:   $new_date" > /dev/null
+            exit
+        fi
 
-    rebase_sort
-}
+        echo "$log_brand Editing TK History"
+
+        if git branch | grep -q $timer_branch; then
+            checkout_timer
+        else
+            echo "Please initiate the timer"
+            exit
+        fi
+
+        git rebase -q -ik $(git rev-list --max-parents=0 HEAD)
+
+        rebase_finished
+    }
+
+    function rebase_commit {
+        set_commit_date "$timestamp"
+        if git commit --allow-empty --amend --date="$new_date" -m "$log_brand ""$rebase_str""$new_date" > /dev/null; then
+            rebase_continue
+            rebase_finished
+        fi
+    }
 
 ###################################################################
 #                       Init TK
 ###################################################################
-function init {
-    echo "[Git TK] Setting up Git TK"
+    function init {
+        echo "[Git TK] Setting up Git TK"
 
-    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-        git branch $timer_branch $(git rev-list --max-parents=0 HEAD) > /dev/null
-    else
-        git init
-        git commit --allow-empty -m "Init"
+        if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+            git branch $timer_branch $(git rev-list --max-parents=0 HEAD) > /dev/null
+        else
+            git init
+            git commit --allow-empty -m "Init"
 
-        git branch $timer_branch $(git rev-list --max-parents=0 HEAD) > /dev/null
-    fi
-}
+            git branch $timer_branch $(git rev-list --max-parents=0 HEAD) > /dev/null
+        fi
+    }
 
-if (( $# < 1 )); then
-    set_time_arrays
-
-    if is_rebasing; then
-        echo "Currently rebasing"
+###################################################################
+#                             Main
+###################################################################
+    if [[ "$1" == "init" ]]; then
+        init
         exit
     fi
 
-    if (( ${#starts[@]} > ${#ends[@]} )); then
-        end_slot
+    check_for_tk_branch
+
+    if (( $# < 1 )); then
+        create_timestamp
+    elif date -d "${@}" > /dev/null 2>&1; then
+        create_timestamp
+    elif [[ "$1" == "log" ]]; then
+        set_time_arrays
+        set_hash_arrays
+        log
+    elif [[ "$1" == "create" ]]; then
+        create
+    elif [[ "$1" == "rebase" ]]; then
+        rebase
     else
-        start_slot
+        echo "$1 is not a valid command"
     fi
-elif [[ "$1" == "init" ]]; then
-    init
-elif [[ "$1" == "log" ]]; then
-    set_time_arrays
-    set_hash_arrays
-    log
-elif [[ "$1" == "create" ]]; then
-    create
-elif [[ "$1" == "rebase" ]]; then
-    rebase
-else
-    echo "$1 is not a valid command"
-fi

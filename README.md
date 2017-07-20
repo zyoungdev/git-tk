@@ -4,21 +4,33 @@ Time tracking bash script where state is kept in a git branch. No daemon or bina
 
 To use:
 ```Bash
-$ git-tk init                               # Initialize the tk branch
+# Initialize the tk branch
+$ git-tk init
  
-$ git-tk                                    # Create a starting timestamp
-$ git commit --allow-empty -m "Test commit" # Do some work
-$ git-tk                                    # Create an ending timestamp
+# Create a starting timestamp
+$ git-tk
+# Do some work
+$ git commit --allow-empty -m "Test commit"
+# Create an ending timestamp
+$ git-tk
  
-$ git-tk rebase                             # Use an interactive rebase to edit timestamps
-$ git-tk rebase start "$(date)"             # Convert commit to a starting timestamp
-$ git-tk rebase end "$(date)"               # Convert commit to a starting timestamp
+# Use an interactive rebase to edit timestamps 
+# OR continue while rebasing
+$ git-tk rebase
+# Override timestamp
+$ git-tk rebase "$(date)"
  
-$ git-tk create start "$(date)"             # Create a starting timestamp manually
-$ git-tk create end "$(date)"               # Create an ending timestamp manually
+# Do some work
+$ git commit --allow-empty -m "Test commit"
+# Create a starting timestamp manually
+$ git-tk "$(date -d '10 minutes ago')"
+# Create an ending timestamp manually
+$ git-tk "$(date -d '5 minutes ago')"
  
-$ git-tk log                                # List commits with timestamps in an easy to read format
-$ git-tk log -v                             # List whole commits with timestamps in an easy to read format
+# List commits with timestamps in an easy to read format
+$ git-tk log
+# List whole commits with timestamps in an easy to read format
+$ git-tk log -v
 ```
 
 ## Using Git Alias
