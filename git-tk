@@ -320,8 +320,6 @@ now="$(date)"
         set_time_arrays
         set_hash_arrays
         log
-    elif [[ "$1" == "create" ]]; then
-        create
     elif [[ "$1" == "rebase" ]]; then
         rebase
     else
