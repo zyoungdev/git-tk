@@ -3,7 +3,7 @@
 Time tracking bash script where state is kept in a git branch. No daemon or binary to install. Run ```git-tk``` to record starting and ending timestamps. You may even reboot after recording a starting timestamp.
 
 To use:
-```Bash
+```bash
 # Initialize the tk branch
 $ git-tk init
  
