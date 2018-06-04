@@ -34,7 +34,7 @@ $ git-tk log -v
 ```
 
 ## Using Git Alias
-```
+```bash
 # ~/.gitconfig
 ...
 
