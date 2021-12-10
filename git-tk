@@ -22,7 +22,7 @@ log_brand="[Git TK]"
 timer_branch="tk"
 old_branch=.git-tk_old-branch
 
-now="$(date)"
+now="$(date '+%a %d %b %Y %T')"
 
 ###################################################################
 #                       Colors
