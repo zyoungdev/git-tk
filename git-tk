@@ -221,10 +221,10 @@ now="$(date)"
         checkout_timer
 
         # Generate or collect timestamp
-        if [[ -z "${@}" ]]; then
+        if [[ -z "${1}" ]]; then
             timestamp="$now"
         else
-            timestamp="${@}"
+            timestamp="${1}"
         fi
 
         # Commit to timer_branch
@@ -315,7 +315,7 @@ now="$(date)"
     if (( $# < 1 )); then
         create_timestamp
     elif date -d "${@}" > /dev/null 2>&1; then
-        create_timestamp
+        create_timestamp "${@}"
     elif [[ "$1" == "log" ]]; then
         set_time_arrays
         set_hash_arrays
